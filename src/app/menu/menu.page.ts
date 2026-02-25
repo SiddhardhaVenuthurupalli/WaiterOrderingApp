@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { catchError, distinctUntilChanged, filter, map, of, switchMap } from 'rxjs';
 import {
   IonBadge,
   IonButton,
@@ -39,6 +40,7 @@ export class MenuPage implements OnInit {
   private readonly router = inject(Router);
   private readonly modalCtrl = inject(ModalController);
   private readonly toastController = inject(ToastController);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly queryParams = toSignal(this.route.queryParamMap, {
     initialValue: convertToParamMap({}),
@@ -56,18 +58,31 @@ export class MenuPage implements OnInit {
 
   ngOnInit(): void {
     this.loadCategories();
-    effect(() => {
-      const tableId = this.tableId();
-      if (tableId) {
-        this.loadOrderHistory(tableId);
-      }
-    });
+    toObservable(this.tableId)
+      .pipe(
+        map((tableId) => tableId ?? ''),
+        distinctUntilChanged(),
+        filter((tableId) => tableId !== ''),
+        switchMap((tableId) =>
+          this.orderService.getOrder(tableId).pipe(
+            map((data) =>
+              this.orderService.normalizeList<OrderItem>(data as OrderItem[] | { items?: OrderItem[]; data?: OrderItem[] }),
+            ),
+            catchError(() => {
+              void this.presentToast('Unable to load previous orders.', 'warning');
+              return of<OrderItem[]>([]);
+            }),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((history) => this.previousOrders.set(history));
   }
 
   loadCategories() {
     this.orderService.getMenuCategories().subscribe({
       next: (data) => {
-        const categories = this.normalizeList<MenuCategory>(data);
+        const categories = this.orderService.normalizeList<MenuCategory>(data);
         this.categories.set(categories);
         if (categories.length) {
           const id = this.getCategoryId(categories[0]);
@@ -81,7 +96,7 @@ export class MenuPage implements OnInit {
 
   loadItems(categoryId: number | string) {
     this.orderService.getMenuItems(categoryId).subscribe({
-      next: (data) => this.items.set(this.normalizeList<MenuItem>(data)),
+      next: (data) => this.items.set(this.orderService.normalizeList<MenuItem>(data)),
       error: () => this.presentToast('Failed to load menu items.', 'danger'),
     });
   }
@@ -104,7 +119,7 @@ export class MenuPage implements OnInit {
       return;
     }
     this.orderService.searchMenuItems(term).subscribe({
-      next: (data) => this.items.set(this.normalizeList<MenuItem>(data)),
+      next: (data) => this.items.set(this.orderService.normalizeList<MenuItem>(data)),
       error: () => this.presentToast('Search failed.', 'danger'),
     });
   }
@@ -192,35 +207,12 @@ export class MenuPage implements OnInit {
     });
   }
 
-  loadOrderHistory(tableId: string) {
-    this.orderService.getOrder(tableId).subscribe({
-      next: (data) => {
-        const history = this.normalizeList<OrderItem>(data as OrderItem[] | { items?: OrderItem[]; data?: OrderItem[] });
-        this.previousOrders.set(history);
-      },
-      error: () => this.presentToast('Unable to load previous orders.', 'warning'),
-    });
-  }
-
   getCategoryId(category: MenuCategory) {
     return category.id ?? category.name ?? '';
   }
 
   private getItemId(item: MenuItem) {
     return item.id ?? item.name ?? '';
-  }
-
-  private normalizeList<T>(data: T[] | { items?: T[]; data?: T[] } | null | undefined) {
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data?.items) {
-      return data.items;
-    }
-    if (data?.data) {
-      return data.data;
-    }
-    return [];
   }
 
   private async presentToast(message: string, color: string) {

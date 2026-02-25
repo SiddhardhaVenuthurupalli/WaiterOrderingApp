@@ -38,9 +38,10 @@ export class LoginPage {
   readonly loggingIn = signal(false);
 
   async submitIp() {
-    const ip = this.ipAddress().trim();
+    const rawIp = this.ipAddress().trim();
+    const ip = this.orderService.normalizeTargetIp(rawIp);
     if (!ip) {
-      await this.presentToast('Enter a target IP address.', 'warning');
+      await this.presentToast('Enter a valid target IP address.', 'warning');
       return;
     }
 
@@ -49,16 +50,19 @@ export class LoginPage {
       const isWeb = window.location.protocol.startsWith('http');
       const headers = isWeb ? new HttpHeaders({ 'x-target-ip': ip }) : undefined;
       const url = isWeb ? '/proxy' : `http://${ip}:5000`;
-      const response = await firstValueFrom(this.http.get(url, { headers, responseType: 'text' }));
-      if (response?.includes('App Backend Ready')) {
+      const response = await firstValueFrom(this.http.get(url, { headers, responseType: 'text', observe: 'response' }));
+      const body = response.body?.trim() ?? '';
+      if (response.status >= 200 && response.status < 300 && body === 'App Backend Ready') {
         localStorage.setItem('targetIp', ip);
         this.showLogin.set(true);
         await this.presentToast('Backend connected. Please log in.', 'success');
       } else {
-        await this.presentToast('Backend did not respond as expected.', 'danger');
+        await this.presentToast('Backend responded but is not ready yet.', 'danger');
       }
-    } catch {
-      await this.presentToast('Unable to reach backend.', 'danger');
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      const message = status ? `Backend check failed (status ${status}).` : 'Unable to reach backend.';
+      await this.presentToast(message, 'danger');
     } finally {
       this.checkingIp.set(false);
     }
@@ -78,8 +82,21 @@ export class LoginPage {
       await this.orderService.loginUser({ username, password, deviceId });
       await this.presentToast('Login successful.', 'success');
       await this.router.navigate(['/selectTable']);
-    } catch {
-      await this.presentToast('Login failed. Please try again.', 'danger');
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      let message = 'Login failed. Please try again.';
+      if (status === 0 || status === undefined) {
+        message = 'Network error. Please check your connection.';
+      } else if (status === 401) {
+        message = 'Invalid username or password.';
+      } else if (status === 403) {
+        message = 'Access denied. Please contact an administrator.';
+      } else if (status >= 500) {
+        message = 'Server error. Please try again later.';
+      } else if (status) {
+        message = `Login failed (status ${status}).`;
+      }
+      await this.presentToast(message, 'danger');
     } finally {
       this.loggingIn.set(false);
     }

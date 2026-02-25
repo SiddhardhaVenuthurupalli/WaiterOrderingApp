@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, filter, map } from 'rxjs';
 import {
   IonButton,
   IonCard,
@@ -39,20 +41,30 @@ import { OrderService, TableInfo } from '../services/order.service';
 })
 export class SelectTablePage implements OnInit {
   private readonly orderService = inject(OrderService);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toastController = inject(ToastController);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly tables = signal<TableInfo[]>([]);
   readonly loading = signal(false);
 
   ngOnInit(): void {
     this.loadTables();
+    this.route.queryParamMap
+      .pipe(
+        map((params) => params.get('refresh') ?? ''),
+        distinctUntilChanged(),
+        filter((refresh) => refresh !== ''),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.loadTables());
   }
 
   loadTables() {
     this.loading.set(true);
     this.orderService.getTables().subscribe({
-      next: (data) => this.tables.set(this.normalizeList<TableInfo>(data)),
+      next: (data) => this.tables.set(this.orderService.normalizeList<TableInfo>(data)),
       error: () => this.presentToast('Failed to load tables.', 'danger'),
       complete: () => this.loading.set(false),
     });
@@ -67,8 +79,8 @@ export class SelectTablePage implements OnInit {
 
     this.orderService.getTableStatus(tableId).subscribe({
       next: async (statusResponse) => {
-        const status = `${statusResponse?.status ?? table.status ?? ''}`.toLowerCase();
-        if (status.includes('pending') && status.includes('payment')) {
+        const status = this.normalizeStatus(`${statusResponse?.status ?? table.status ?? ''}`);
+        if (status.includes('pendingpayment')) {
           await this.presentToast('This table is pending payment.', 'warning');
           return;
         }
@@ -87,7 +99,7 @@ export class SelectTablePage implements OnInit {
   }
 
   getStatusClass(table: TableInfo) {
-    const status = `${table.status ?? ''}`.toLowerCase();
+    const status = this.normalizeStatus(`${table.status ?? ''}`);
     if (status.includes('available') || status.includes('free')) {
       return 'bg-success';
     }
@@ -100,17 +112,8 @@ export class SelectTablePage implements OnInit {
     return 'bg-secondary';
   }
 
-  private normalizeList<T>(data: T[] | { items?: T[]; data?: T[] } | null | undefined) {
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data?.items) {
-      return data.items;
-    }
-    if (data?.data) {
-      return data.data;
-    }
-    return [];
+  private normalizeStatus(status: string) {
+    return status.toLowerCase().replace(/[\s_-]/g, '');
   }
 
   private async presentToast(message: string, color: string) {

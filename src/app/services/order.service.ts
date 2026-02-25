@@ -30,21 +30,23 @@ export interface OrderItem {
 @Injectable({ providedIn: 'root' })
 export class OrderService {
   private readonly http = inject(HttpClient);
+  private readonly targetIpPattern =
+    /^(?:(?:10|127)\.(?:\d{1,3}\.){2}\d{1,3}|192\.168\.(?:\d{1,3}\.)\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.(?:\d{1,3}\.)\d{1,3})$/;
 
   private isWeb(): boolean {
     return window.location.protocol.startsWith('http');
   }
 
   private getTargetIp(): string {
-    return localStorage.getItem('targetIp') ?? '';
+    return this.normalizeTargetIp(localStorage.getItem('targetIp') ?? '');
   }
 
   private getApiHost(): string {
     if (this.isWeb()) {
       return '/proxy';
     }
-    const targetIp = this.getTargetIp() || '127.0.0.1';
-    return `http://${targetIp}:5000`;
+    const targetIp = this.getTargetIp();
+    return `http://${targetIp || '127.0.0.1'}:5000`;
   }
 
   private getApiBase(): string {
@@ -57,6 +59,28 @@ export class OrderService {
     }
     const targetIp = this.getTargetIp();
     return targetIp ? new HttpHeaders({ 'x-target-ip': targetIp }) : undefined;
+  }
+
+  normalizeTargetIp(value: string): string {
+    const trimmed = value.trim();
+    return this.targetIpPattern.test(trimmed) ? trimmed : '';
+  }
+
+  isValidTargetIp(value: string): boolean {
+    return this.normalizeTargetIp(value) !== '';
+  }
+
+  normalizeList<T>(data: T[] | { items?: T[]; data?: T[] } | null | undefined): T[] {
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data?.items) {
+      return data.items;
+    }
+    if (data?.data) {
+      return data.data;
+    }
+    return [];
   }
 
   getTables() {
@@ -97,25 +121,33 @@ export class OrderService {
       { ...data, userName: preferredName },
       { ...data, username: preferredName },
     ];
-    let lastError: { status?: number; url?: string } | undefined;
-
+    const errors: Array<{ status?: number; url: string }> = [];
+    const attempts: Array<{ url: string; payload: typeof payloads[number] }> = [];
     for (const url of urls) {
-      const fullUrl = `${apiHost}${url}`;
       for (const payload of payloads) {
-        triedUrls.push(fullUrl);
-        try {
-          return await firstValueFrom(this.http.post(fullUrl, payload, { headers: this.getHeaders() }));
-        } catch (error) {
-          const typedError = error as { status?: number; url?: string };
-          lastError = { status: typedError?.status, url: typedError?.url };
-        }
+        attempts.push({
+          url: `${apiHost}${url}`,
+          payload,
+        });
       }
     }
 
+    for (const attempt of attempts) {
+      triedUrls.push(attempt.url);
+      try {
+        return await firstValueFrom(this.http.post(attempt.url, attempt.payload, { headers: this.getHeaders() }));
+      } catch (error) {
+        const typedError = error as { status?: number };
+        errors.push({ status: typedError?.status, url: attempt.url });
+      }
+    }
+
+    const lastError = errors[errors.length - 1];
     throw {
       status: lastError?.status,
       url: lastError?.url ?? triedUrls[triedUrls.length - 1],
       triedUrls,
+      errors,
     };
   }
 }

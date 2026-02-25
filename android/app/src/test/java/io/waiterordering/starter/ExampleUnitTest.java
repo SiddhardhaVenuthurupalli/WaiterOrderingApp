@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package io.waiterordering.starter;
 
 import static org.junit.Assert.*;
 
