@@ -98,6 +98,7 @@ export class LoginPage {
       }
       await this.presentToast(message, 'danger');
     } finally {
+      this.password.set('');
       this.loggingIn.set(false);
     }
   }
