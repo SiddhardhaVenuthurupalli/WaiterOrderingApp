@@ -1,0 +1,53 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Order Summary</ion-title>
+    <ion-buttons slot="end">
+      <ion-button color="medium" (click)="dismiss()">Close</ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <h6 class="text-muted mb-2">Previous Orders</h6>
+  @if (history().length) {
+    <ion-list>
+      @for (item of history(); track item.id) {
+        <ion-item>
+          <ion-label>
+            <div class="fw-semibold">{{ item.name || 'Item' }}</div>
+            <div class="text-muted small">Qty: {{ item.quantity }}</div>
+          </ion-label>
+        </ion-item>
+      }
+    </ion-list>
+  } @else {
+    <p class="text-muted mb-4">No previous orders for this table.</p>
+  }
+
+  <h6 class="text-muted mt-4 mb-2">Current Order</h6>
+  @if (items().length) {
+    <ion-list>
+      @for (item of items(); track item.id) {
+        <ion-item>
+          <ion-label>
+            <div class="fw-semibold">{{ item.name || 'Item' }}</div>
+            <div class="text-muted small">Qty: {{ item.quantity }}</div>
+            @if (item.remark) {
+              <div class="text-muted small">Remark: {{ item.remark }}</div>
+            }
+          </ion-label>
+          <ion-buttons slot="end">
+            <ion-button fill="outline" size="small" (click)="decrement(item)">-</ion-button>
+            <ion-button fill="outline" size="small" (click)="increment(item)">+</ion-button>
+          </ion-buttons>
+        </ion-item>
+      }
+    </ion-list>
+  } @else {
+    <p class="text-muted">No items added yet.</p>
+  }
+</ion-content>
+
+<ion-footer class="ion-padding">
+  <ion-button expand="block" (click)="dismiss()">Done</ion-button>
+</ion-footer>

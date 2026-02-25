@@ -1,0 +1,13 @@
+.menu-list ion-item {
+  --inner-padding-end: 0;
+}
+
+.remark-textarea {
+  --padding-start: 0;
+}
+
+.menu-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
