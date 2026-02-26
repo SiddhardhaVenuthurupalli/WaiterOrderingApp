@@ -1,0 +1,40 @@
+<app-header></app-header>
+
+<ion-content class="ion-padding">
+  <div class="container">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h5 class="mb-0">Select a Table</h5>
+      <ion-button size="small" fill="outline" (click)="loadTables()">Refresh</ion-button>
+    </div>
+
+    @if (loading()) {
+      <div class="text-center my-4">
+        <ion-spinner name="dots"></ion-spinner>
+      </div>
+    } @else {
+      @if (tables().length) {
+        <ion-grid>
+          <ion-row>
+            @for (table of tables(); track table.id) {
+              <ion-col size="12" size-sm="6" size-md="4">
+                <ion-card class="table-card" (click)="selectTable(table)">
+                  <ion-card-header [ngClass]="getStatusClass(table)">
+                    <ion-card-title class="text-white">
+                      {{ table.name || ('Table ' + table.id) }}
+                    </ion-card-title>
+                  </ion-card-header>
+                  <ion-card-content>
+                    <div class="text-muted small text-uppercase">Status</div>
+                    <div class="fw-semibold">{{ table.status || 'Unknown' }}</div>
+                  </ion-card-content>
+                </ion-card>
+              </ion-col>
+            }
+          </ion-row>
+        </ion-grid>
+      } @else {
+        <p class="text-muted">No tables available.</p>
+      }
+    }
+  </div>
+</ion-content>

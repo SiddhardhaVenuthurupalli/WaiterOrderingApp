@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">waiterordering</string>
+    <string name="title_activity_main">waiterordering</string>
+    <string name="package_name">io.waiterordering.starter</string>
+    <string name="custom_url_scheme">io.waiterordering.starter</string>
+</resources>

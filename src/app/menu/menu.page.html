@@ -1,0 +1,74 @@
+<app-header></app-header>
+
+<ion-content class="ion-padding">
+  <div class="container">
+    <div class="mb-3">
+      <ion-searchbar
+        placeholder="Search menu items"
+        (ionInput)="searchItems($event)"
+        [value]="searchTerm()"
+      ></ion-searchbar>
+    </div>
+
+    @if (categories().length) {
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        @for (category of categories(); track category.id) {
+          <ion-button
+            size="small"
+            [fill]="selectedCategoryId() === getCategoryId(category) ? 'solid' : 'outline'"
+            (click)="selectCategory(category)"
+          >
+            {{ category.name || 'Category' }}
+          </ion-button>
+        }
+      </div>
+    }
+
+    <ion-list class="menu-list">
+      @for (item of items(); track item.id) {
+        <ion-item lines="none">
+          <div class="w-100">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">{{ item.name || 'Menu Item' }}</div>
+                @if (item.price !== undefined) {
+                  <div class="text-muted small">₹ {{ item.price }}</div>
+                }
+              </div>
+              @if (getItemQuantity(item)) {
+                <ion-badge color="primary">{{ getItemQuantity(item) }}</ion-badge>
+              }
+            </div>
+
+            <div class="d-flex align-items-center gap-2 mt-2">
+              <ion-button size="small" fill="outline" (click)="updateQuantity(item, -1)">-</ion-button>
+              <span class="fw-semibold">{{ getItemQuantity(item) }}</span>
+              <ion-button size="small" fill="outline" (click)="updateQuantity(item, 1)">+</ion-button>
+            </div>
+
+            @if (getItemQuantity(item)) {
+              <ion-textarea
+                class="remark-textarea mt-2"
+                rows="2"
+                placeholder="Add remark"
+                [value]="getItemRemark(item)"
+                (ionInput)="updateRemark(item, $event.detail.value ?? '')"
+              ></ion-textarea>
+            }
+          </div>
+        </ion-item>
+      }
+    </ion-list>
+
+    @if (!items().length) {
+      <p class="text-muted">No menu items found.</p>
+    }
+  </div>
+</ion-content>
+
+<div class="menu-footer bg-white border-top p-3">
+  <div class="container d-flex flex-column flex-md-row gap-2">
+    <ion-button expand="block" fill="outline" (click)="openSummary()">View Summary</ion-button>
+    <ion-button expand="block" (click)="placeOrder()">Place Order</ion-button>
+  </div>
+</div>

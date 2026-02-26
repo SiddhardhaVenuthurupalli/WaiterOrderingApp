@@ -1,0 +1,16 @@
+<ion-header>
+  <ion-toolbar>
+    @if (showBack) {
+      <ion-buttons slot="start">
+        <ion-back-button defaultHref="/selectTable"></ion-back-button>
+      </ion-buttons>
+    }
+    <ion-title>
+      @if (title()) {
+        {{ title() }}
+      } @else {
+        Waiter Ordering
+      }
+    </ion-title>
+  </ion-toolbar>
+</ion-header>
