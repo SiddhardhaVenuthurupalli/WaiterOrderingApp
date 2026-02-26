@@ -1,5 +1,5 @@
 const allowedIpPattern =
-  /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+  /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?|0)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?|0)$/;
 
 const normalizeTargetIp = (value) => {
   const ip = `${value ?? ''}`.trim();
