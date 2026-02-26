@@ -64,7 +64,14 @@ export class SelectTablePage implements OnInit {
   loadTables() {
     this.loading.set(true);
     this.orderService.getTables().subscribe({
-      next: (data) => this.tables.set(this.orderService.normalizeList<TableInfo>(data)),
+      next: (data) => {
+        const overrides = this.getTableStatusOverrides();
+        const tables = this.orderService.normalizeList<TableInfo>(data).map((table) => {
+          const override = overrides[`${table.id}`];
+          return override ? { ...table, status: override } : table;
+        });
+        this.tables.set(tables);
+      },
       error: () => this.presentToast('Failed to load tables.', 'danger'),
       complete: () => this.loading.set(false),
     });
@@ -93,7 +100,18 @@ export class SelectTablePage implements OnInit {
         });
       },
       error: async () => {
-        await this.presentToast('Unable to verify table status.', 'danger');
+        const status = this.normalizeStatus(`${table.status ?? ''}`);
+        if (status.includes('pendingpayment')) {
+          await this.presentToast('This table is pending payment.', 'warning');
+          return;
+        }
+        await this.router.navigate(['/menu'], {
+          queryParams: {
+            tableId,
+            tableName: table.name,
+            TBNAME: table.name ?? tableId,
+          },
+        });
       },
     });
   }
@@ -114,6 +132,15 @@ export class SelectTablePage implements OnInit {
 
   private normalizeStatus(status: string) {
     return status.toLowerCase().replace(/[\s_-]/g, '');
+  }
+
+  private getTableStatusOverrides() {
+    try {
+      const raw = localStorage.getItem('tableStatusOverrides') ?? '{}';
+      return JSON.parse(raw) as Record<string, string>;
+    } catch {
+      return {} as Record<string, string>;
+    }
   }
 
   private async presentToast(message: string, color: string) {

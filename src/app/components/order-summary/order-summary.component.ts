@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnInit, inject, signal } from '@angular/core';
+import { Component, Input, inject, signal } from '@angular/core';
 import { IonButton, IonButtons, IonContent, IonFooter, IonHeader, IonItem, IonLabel, IonList, IonTitle, IonToolbar } from '@ionic/angular/standalone';
 import { ModalController } from '@ionic/angular';
 import { OrderItem } from '../../services/order.service';
@@ -23,19 +23,19 @@ import { OrderItem } from '../../services/order.service';
     IonFooter,
   ],
 })
-export class OrderSummaryComponent implements OnInit {
+export class OrderSummaryComponent {
   private readonly modalCtrl = inject(ModalController);
 
-  @Input() previousOrders: OrderItem[] = [];
-  @Input() currentItems: OrderItem[] = [];
+  @Input() set previousOrders(value: OrderItem[] | null | undefined) {
+    this.history.set(value ?? []);
+  }
+
+  @Input() set currentItems(value: OrderItem[] | null | undefined) {
+    this.items.set(value ?? []);
+  }
 
   readonly history = signal<OrderItem[]>([]);
   readonly items = signal<OrderItem[]>([]);
-
-  ngOnInit(): void {
-    this.history.set(this.previousOrders ?? []);
-    this.items.set(this.currentItems ?? []);
-  }
 
   increment(item: OrderItem) {
     this.updateQuantity(item, 1);
