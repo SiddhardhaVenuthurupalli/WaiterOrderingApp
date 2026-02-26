@@ -31,7 +31,7 @@ export interface OrderItem {
 export class OrderService {
   private readonly http = inject(HttpClient);
   private readonly targetIpPattern =
-    /^(?:(?:10|127)\.(?:\d{1,3}\.){2}\d{1,3}|192\.168\.(?:\d{1,3}\.)\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.(?:\d{1,3}\.)\d{1,3})$/;
+    /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?|0)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?|0)$/;
 
   private isWeb(): boolean {
     return window.location.protocol.startsWith('http');
