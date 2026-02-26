@@ -46,21 +46,22 @@ export class LoginPage {
     }
 
     this.checkingIp.set(true);
+    const isWeb = window.location.protocol.startsWith('http');
+    const headers = isWeb ? new HttpHeaders({ 'x-target-ip': ip }) : undefined;
+    const url = isWeb ? '/proxy' : `http://${ip}:5000`;
     try {
-      const isWeb = window.location.protocol.startsWith('http');
-      const headers = isWeb ? new HttpHeaders({ 'x-target-ip': ip }) : undefined;
-      const url = isWeb ? '/proxy' : `http://${ip}:5000`;
       const response = await firstValueFrom(this.http.get(url, { headers, responseType: 'text', observe: 'response' }));
-      const body = response.body?.trim() ?? '';
-      if (response.status >= 200 && response.status < 300 && body === 'App Backend Ready') {
-        localStorage.setItem('targetIp', ip);
-        this.showLogin.set(true);
-        await this.presentToast('Backend connected. Please log in.', 'success');
+      if (response.status >= 200 && response.status < 300) {
+        await this.handleBackendReady(ip);
       } else {
         await this.presentToast('Backend responded but is not ready yet.', 'danger');
       }
     } catch (error) {
       const status = (error as { status?: number }).status;
+      if (status !== undefined && status < 500) {
+        await this.handleBackendReady(ip);
+        return;
+      }
       const message = status ? `Backend check failed (status ${status}).` : 'Unable to reach backend.';
       await this.presentToast(message, 'danger');
     } finally {
@@ -111,5 +112,11 @@ export class LoginPage {
       color,
     });
     await toast.present();
+  }
+
+  private async handleBackendReady(ip: string) {
+    localStorage.setItem('targetIp', ip);
+    this.showLogin.set(true);
+    await this.presentToast('Backend connected. Please log in.', 'success');
   }
 }
