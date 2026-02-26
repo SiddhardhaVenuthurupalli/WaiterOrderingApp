@@ -51,6 +51,7 @@ export class MenuPage implements OnInit {
 
   readonly categories = signal<MenuCategory[]>([]);
   readonly items = signal<MenuItem[]>([]);
+  readonly allItems = signal<MenuItem[]>([]);
   readonly previousOrders = signal<OrderItem[]>([]);
   readonly orderStorage = signal<OrderItem[]>([]);
   readonly searchTerm = signal('');
@@ -96,7 +97,11 @@ export class MenuPage implements OnInit {
 
   loadItems(categoryId: number | string) {
     this.orderService.getMenuItems(categoryId).subscribe({
-      next: (data) => this.items.set(this.orderService.normalizeList<MenuItem>(data)),
+      next: (data) => {
+        const items = this.orderService.normalizeList<MenuItem>(data);
+        this.allItems.set(items);
+        this.items.set(items);
+      },
       error: () => this.presentToast('Failed to load menu items.', 'danger'),
     });
   }
@@ -118,10 +123,9 @@ export class MenuPage implements OnInit {
       }
       return;
     }
-    this.orderService.searchMenuItems(term).subscribe({
-      next: (data) => this.items.set(this.orderService.normalizeList<MenuItem>(data)),
-      error: () => this.presentToast('Search failed.', 'danger'),
-    });
+    const lowerTerm = term.toLowerCase();
+    const filtered = this.allItems().filter((item) => (item.name ?? '').toLowerCase().includes(lowerTerm));
+    this.items.set(filtered);
   }
 
   getItemQuantity(item: MenuItem) {
@@ -196,9 +200,31 @@ export class MenuPage implements OnInit {
       name: this.tableName(),
     };
     this.orderService.placeOrder(this.orderStorage(), table).subscribe({
-      next: async () => {
-        await this.presentToast('Order placed successfully.', 'success');
+      next: async (response) => {
+        const message =
+          typeof response === 'object' && response && 'message' in response
+            ? `${(response as { message?: string }).message ?? 'Order placed successfully.'}`
+            : 'Order placed successfully.';
+        await this.presentToast(message, 'success');
         this.orderStorage.set([]);
+        const overrideId = this.tableId();
+        if (overrideId !== '') {
+          try {
+            const raw = localStorage.getItem('tableStatusOverrides') ?? '{}';
+            const overrides = JSON.parse(raw) as Record<string, string>;
+            overrides[`${overrideId}`] = 'occupied';
+            localStorage.setItem('tableStatusOverrides', JSON.stringify(overrides));
+          } catch {
+            // Ignore local storage issues.
+          }
+        }
+        const tableId = this.tableId();
+        if (tableId !== '') {
+          this.orderService.getOrder(tableId).subscribe({
+            next: (history) => this.previousOrders.set(history),
+            error: () => void this.presentToast('Unable to refresh order summary.', 'warning'),
+          });
+        }
         await this.router.navigate(['/selectTable'], {
           queryParams: { refresh: Date.now() },
         });

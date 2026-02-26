@@ -52,7 +52,16 @@ export class LoginPage {
       const url = isWeb ? '/proxy' : `http://${ip}:5000`;
       const response = await firstValueFrom(this.http.get(url, { headers, responseType: 'text', observe: 'response' }));
       const body = response.body?.trim() ?? '';
-      if (response.status >= 200 && response.status < 300 && body === 'App Backend Ready') {
+      let ready = body === 'App Backend Ready';
+      if (!ready && body) {
+        try {
+          const parsed = JSON.parse(body) as { val?: string };
+          ready = parsed.val === 'App Backend Ready';
+        } catch {
+          // Non-JSON response; keep ready as false.
+        }
+      }
+      if (response.status >= 200 && response.status < 300 && ready) {
         localStorage.setItem('targetIp', ip);
         this.showLogin.set(true);
         await this.presentToast('Backend connected. Please log in.', 'success');

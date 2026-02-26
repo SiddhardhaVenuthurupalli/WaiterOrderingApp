@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 
 export interface TableInfo {
   id: number | string;
@@ -50,7 +50,7 @@ export class OrderService {
   }
 
   private getApiBase(): string {
-    return `${this.getApiHost()}/api/v1`;
+    return `${this.getApiHost()}/api/v1/Orders`;
   }
 
   private getHeaders(): HttpHeaders | undefined {
@@ -70,7 +70,7 @@ export class OrderService {
     return this.normalizeTargetIp(value) !== '';
   }
 
-  normalizeList<T>(data: T[] | { items?: T[]; data?: T[] } | null | undefined): T[] {
+  normalizeList<T>(data: T[] | { items?: T[]; data?: T[]; recordset?: T[] } | null | undefined): T[] {
     if (Array.isArray(data)) {
       return data;
     }
@@ -80,23 +80,130 @@ export class OrderService {
     if (data?.data) {
       return data.data;
     }
+    if (data?.recordset) {
+      return data.recordset;
+    }
     return [];
   }
 
+  private mapStatusValue(value: unknown): string | undefined {
+    if (value === null || value === undefined || value === '') {
+      return undefined;
+    }
+    const normalized = `${value}`.trim();
+    const code = Number(normalized);
+    if (!Number.isNaN(code)) {
+      if (code === 0) {
+        return 'available';
+      }
+      if (code === 1) {
+        return 'occupied';
+      }
+      if (code === 2) {
+        return 'pendingpayment';
+      }
+    }
+    return normalized;
+  }
+
+  private mapCategoryInfo(row: Record<string, unknown>): MenuCategory {
+    const id = (row['SNO'] ?? row['id'] ?? row['CATEGORYID'] ?? row['categoryId'] ?? row['categoryID']) as
+      | number
+      | string
+      | undefined;
+    const rawName = (row['CATEGORYNAME'] ?? row['CATEGORY'] ?? row['NAME'] ?? row['name']) as string | undefined;
+    const name = rawName && rawName.trim() ? rawName.trim() : undefined;
+    return {
+      id: id as number | string,
+      name,
+    };
+  }
+
+  private mapMenuItemInfo(row: Record<string, unknown>): MenuItem {
+    return {
+      id: (row['SNO'] ?? row['id'] ?? row['ITEMID'] ?? row['ITEM_ID'] ?? row['itemId'] ?? row['itemID']) as
+        | number
+        | string,
+      name: (row['ITEMNAME'] ?? row['NAME'] ?? row['name'] ?? row['DESCRIPTION']) as string | undefined,
+      price: Number(row['RATE'] ?? row['PRICE'] ?? row['price'] ?? row['ITEMPRICE'] ?? row['itemPrice']),
+    };
+  }
+
+  private mapOrderItemInfo(row: Record<string, unknown>): OrderItem {
+    const quantityValue = Number(
+      row['ITEMQUANTITY'] ??
+        row['ITEM_QUANTITY'] ??
+        row['QTY'] ??
+        row['QUANTITY'] ??
+        row['qty'] ??
+        row['quantity'] ??
+        row['ORDERQTY'] ??
+        row['ORDER_QTY'] ??
+        0,
+    );
+    return {
+      id: (row['SNO'] ?? row['id'] ?? row['ITEMID'] ?? row['ITEM_ID'] ?? row['itemId'] ?? row['itemID']) as
+        | number
+        | string,
+      name: (row['ITEMNAME'] ?? row['NAME'] ?? row['name'] ?? row['DESCRIPTION']) as string | undefined,
+      price: Number(row['RATE'] ?? row['PRICE'] ?? row['price'] ?? row['ITEMPRICE'] ?? row['itemPrice']),
+      quantity: Number.isFinite(quantityValue) ? quantityValue : 0,
+      remark: (row['ITEMREMARKS'] ?? row['ITEM_REMARKS'] ?? row['REMARK'] ?? row['REMARKS'] ?? row['COMMENT'] ?? row['COMMENTS']) as
+        | string
+        | undefined,
+    };
+  }
+
+  private mapTableInfo(row: Record<string, unknown>): TableInfo {
+    return {
+      id: (row['SNO'] ?? row['id'] ?? row['TABLEID'] ?? row['tableId'] ?? row['tableID']) as number | string,
+      name: (row['TBNAME'] ?? row['BTNNAME'] ?? row['TABLENAME'] ?? row['name']) as string | undefined,
+      status: this.mapStatusValue(row['TBSTATUS'] ?? row['status'] ?? row['STATUS']),
+    };
+  }
+
   getTables() {
-    return this.http.get<TableInfo[]>(`${this.getApiBase()}/tables`, { headers: this.getHeaders() });
+    return this.http.get(`${this.getApiBase()}/tables`, { headers: this.getHeaders() }).pipe(
+      map((data) => this.normalizeList<Record<string, unknown>>(data).map((row) => this.mapTableInfo(row))),
+    );
   }
 
   getTableStatus(id: number | string) {
-    return this.http.get<{ status?: string }>(`${this.getApiBase()}/tables/${id}/status`, { headers: this.getHeaders() });
+    const params = new HttpParams().set('id', `${id}`);
+    return this.http.get(`${this.getApiBase()}/tablestatus`, { headers: this.getHeaders(), params }).pipe(
+      map((data) => {
+        const [row] = this.normalizeList<Record<string, unknown>>(data);
+        if (!row) {
+          return { status: undefined } as { status?: string };
+        }
+        return {
+          status: this.mapStatusValue(row['TBSTATUS'] ?? row['status'] ?? row['STATUS']),
+        } as { status?: string };
+      }),
+    );
   }
 
   getMenuCategories() {
-    return this.http.get<MenuCategory[]>(`${this.getApiBase()}/categories`, { headers: this.getHeaders() });
+    return this.http.get(`${this.getApiBase()}/categories`, { headers: this.getHeaders() }).pipe(
+      map((data) => {
+        const categories = this.normalizeList<Record<string, unknown>>(data).map((row) => this.mapCategoryInfo(row));
+        const unique = new Map<string, MenuCategory>();
+        for (const category of categories) {
+          const key = category.id != null ? String(category.id) : '';
+          if (key && !unique.has(key)) {
+            unique.set(key, category);
+          }
+        }
+        return Array.from(unique.values());
+      }),
+    );
   }
 
   getMenuItems(categoryId: number | string) {
-    return this.http.get<MenuItem[]>(`${this.getApiBase()}/categories/${categoryId}/items`, { headers: this.getHeaders() });
+    const params = new HttpParams().set('id', `${categoryId}`);
+    return this.http.get(`${this.getApiBase()}/menuitems`, { headers: this.getHeaders(), params }).pipe(
+      map((data) => this.normalizeList<Record<string, unknown>>(data).map((row) => this.mapMenuItemInfo(row))),
+    );
   }
 
   searchMenuItems(searchTerm: string) {
@@ -105,17 +212,38 @@ export class OrderService {
   }
 
   getOrder(tableId: number | string) {
-    return this.http.get(`${this.getApiBase()}/orders/${tableId}`, { headers: this.getHeaders() });
+    const params = new HttpParams().set('id', `${tableId}`);
+    return this.http.get(`${this.getApiBase()}/order`, { headers: this.getHeaders(), params }).pipe(
+      map((data) => this.normalizeList<Record<string, unknown>>(data).map((row) => this.mapOrderItemInfo(row))),
+    );
   }
 
   placeOrder(order: OrderItem[], table: TableInfo) {
-    return this.http.post(`${this.getApiBase()}/orders`, { order, table }, { headers: this.getHeaders() });
+    const payload = {
+      table: {
+        SNO: table.id,
+      },
+      order: order.map((item) => ({
+        ITEMCODE: item.id,
+        ITEMNAME: item.name,
+        quantity: item.quantity,
+        remarks: item.remark ?? '',
+      })),
+    };
+    return this.http.post(`${this.getApiBase()}/neworder`, payload, { headers: this.getHeaders() });
   }
 
   async loginUser(data: { username?: string; userName?: string; password?: string; deviceId?: string }) {
     const apiHost = this.getApiHost();
     const triedUrls: string[] = [];
-    const urls = ['/api/v1/checkUser', '/api/v1/checkuser', '/checkUser', '/checkuser'];
+    const urls = [
+      '/api/v1/Orders/checkUser',
+      '/api/v1/Orders/checkuser',
+      '/api/v1/checkUser',
+      '/api/v1/checkuser',
+      '/checkUser',
+      '/checkuser',
+    ];
     const preferredName = data.userName ?? data.username ?? '';
     const payloads = [
       { ...data, userName: preferredName },
